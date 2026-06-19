@@ -1,0 +1,47 @@
+groups:
+  - name: ronki.rules
+    interval: 15s
+    rules:
+
+      # Alert 1: High request latency (p99 > 500ms)
+      - alert: HighLatency
+        expr: >
+          histogram_quantile(0.99,
+            rate(http_request_duration_seconds_bucket[1m])
+          ) > 0.5
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on {{ $labels.service }}"
+          description: >
+            p99 latency is {{ $value | humanizeDuration }} on service
+            {{ $labels.service }} (threshold: 500ms).
+
+      # Alert 2: High HTTP error rate (>10% of requests)
+      - alert: HighErrorRate
+        expr: >
+          rate(http_errors_total[2m])
+          /
+          (rate(http_requests_total[2m]) + 0.001)
+          > 0.10
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: >
+            Error rate is {{ $value | humanizePercentage }} on service
+            {{ $labels.service }} (threshold: 10%).
+
+      # Alert 3: Instance/service is completely down (no scrape for 30s)
+      - alert: InstanceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance down: {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} (job={{ $labels.job }}) has been
+            unreachable for more than 30 seconds.

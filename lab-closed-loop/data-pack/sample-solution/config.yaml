@@ -1,0 +1,33 @@
+# Orchestrator configuration — closed_loop.py reads this at startup.
+
+alertmanager_url: "http://localhost:9093"
+prometheus_url: "http://localhost:9090"
+poll_interval_seconds: 15
+runbook_timeout_seconds: 30
+
+# Relative path from this config file to the baseline JSON
+baseline_path: "../data/baseline.json"
+
+# Runbook map: alertname → script path (relative to this config file)
+runbook_map:
+  HighLatency:   "runbooks/restart_service.sh"
+  HighErrorRate: "runbooks/clear_cache.sh"
+  InstanceDown:  "runbooks/restart_service.sh"
+
+# Rollback map: alertname → rollback script (defaults to same as runbook if absent)
+rollback_map:
+  HighLatency:   "runbooks/restart_service.sh"
+  HighErrorRate: "runbooks/restart_service.sh"
+  InstanceDown:  "runbooks/restart_service.sh"
+
+blast_radius:
+  # Maximum total actions fired across all services per minute
+  max_actions_per_minute: 3
+  # Maximum restart actions per individual service per hour
+  max_restarts_per_service_per_hour: 5
+
+circuit_breaker:
+  # Halt automation after this many consecutive verify failures
+  consecutive_failure_threshold: 3
+  # reset_mode: "manual" — operator must restart the process to reset
+  reset_mode: manual

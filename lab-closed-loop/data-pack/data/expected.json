@@ -1,0 +1,173 @@
+{
+  "_description": "Expected orchestrator behavior for each of the 3 required chaos scenarios.",
+
+  "scenario_1": {
+    "name": "Action success — latency inject on payment-svc",
+    "inject_command": "bash data-pack/scripts/inject_fault.sh latency ronki-payment-svc 500ms",
+    "expected_alert": "HighLatency",
+    "expected_service": "payment-svc",
+    "expected_runbook": "runbooks/restart_service.sh",
+    "expected_flow": [
+      "DETECT: alert HighLatency fires on payment-svc within 60s of inject",
+      "DECIDE: map HighLatency → restart_service.sh; blast-radius check passes",
+      "DRY_RUN: restart_service.sh --dry-run --service payment-svc → exit 0",
+      "ACT: restart_service.sh --service payment-svc → container restarts",
+      "VERIFY: poll Prometheus for 60s; p99 latency drops below 500ms threshold",
+      "SUCCESS: log event_type=ACTION_SUCCESS"
+    ],
+    "expected_log_events": [
+      "ALERT_DETECTED",
+      "DECIDE_RUNBOOK",
+      "BLAST_RADIUS_OK",
+      "DRY_RUN_PASS",
+      "ACTION_EXECUTED",
+      "VERIFY_PASS",
+      "ACTION_SUCCESS"
+    ],
+    "verify_metric": "latency_p99_ms",
+    "verify_threshold": 500,
+    "verify_pass_condition": "metric < threshold"
+  },
+
+  "scenario_2": {
+    "name": "Action fail → rollback — checkout-svc killed",
+    "inject_command": "bash data-pack/scripts/inject_fault.sh kill ronki-checkout-svc",
+    "expected_alert": "InstanceDown",
+    "expected_service": "checkout-svc",
+    "expected_runbook": "runbooks/restart_service.sh",
+    "note": "To force verify FAIL for testing rollback logic: temporarily set verify_thresholds.latency_p99_max_ms=1 in config so verify always fails even after successful restart.",
+    "expected_flow": [
+      "DETECT: alert InstanceDown fires on checkout-svc within 60s of kill",
+      "DECIDE: map InstanceDown → restart_service.sh; blast-radius check passes",
+      "DRY_RUN: restart_service.sh --dry-run --service checkout-svc → exit 0",
+      "ACT: restart_service.sh --service checkout-svc → container starts",
+      "VERIFY: poll Prometheus 60s; verify FAILS (service still unhealthy or threshold forced low)",
+      "ROLLBACK: auto-trigger rollback action",
+      "LOG: event_type=ROLLBACK_TRIGGERED; failure_count incremented to 1"
+    ],
+    "expected_log_events": [
+      "ALERT_DETECTED",
+      "DECIDE_RUNBOOK",
+      "BLAST_RADIUS_OK",
+      "DRY_RUN_PASS",
+      "ACTION_EXECUTED",
+      "VERIFY_FAIL",
+      "ROLLBACK_TRIGGERED",
+      "ROLLBACK_EXECUTED"
+    ],
+    "verify_metric": "up",
+    "verify_threshold": 1,
+    "verify_pass_condition": "metric == threshold"
+  },
+
+  "scenario_3": {
+    "name": "Circuit breaker — 3 consecutive failures",
+    "setup": "Run scenario_2 style inject 3 times in a row with verify always failing (keep low threshold). Each run increments failure_count.",
+    "inject_sequence": [
+      "bash data-pack/scripts/inject_fault.sh kill ronki-checkout-svc",
+      "bash data-pack/scripts/inject_fault.sh recover ronki-checkout-svc",
+      "bash data-pack/scripts/inject_fault.sh kill ronki-checkout-svc",
+      "bash data-pack/scripts/inject_fault.sh recover ronki-checkout-svc",
+      "bash data-pack/scripts/inject_fault.sh kill ronki-checkout-svc"
+    ],
+    "expected_flow": [
+      "Failure 1: action executed, verify fail, rollback triggered — failure_count=1",
+      "Failure 2: action executed, verify fail, rollback triggered — failure_count=2",
+      "Failure 3: action executed, verify fail, rollback triggered — failure_count=3",
+      "CIRCUIT_BREAKER: failure_count >= 3 → orchestrator logs CIRCUIT_BREAKER_HALT",
+      "HALT: no further actions executed until circuit is manually reset"
+    ],
+    "expected_log_events": [
+      "VERIFY_FAIL",
+      "ROLLBACK_TRIGGERED",
+      "VERIFY_FAIL",
+      "ROLLBACK_TRIGGERED",
+      "VERIFY_FAIL",
+      "ROLLBACK_TRIGGERED",
+      "CIRCUIT_BREAKER_HALT"
+    ],
+    "circuit_breaker_config": {
+      "consecutive_failure_threshold": 3,
+      "reset_mode": "manual",
+      "halt_log_event": "CIRCUIT_BREAKER_HALT"
+    }
+  },
+
+  "scenario_4_multi_step_rollback": {
+    "name": "Transactional rollback chain — multi_step_deploy step-C fails",
+    "description": "A 3-step deploy (A→B→C) is triggered. Step C fails. Orchestrator must rollback completed steps in reverse order: rollback-B then rollback-A.",
+    "setup": "Add MultiStepDeploy to runbook_map and multi_step_map in config.yaml pointing to multi_step_deploy.sh steps. Force step-C to fail by passing an invalid service name or removing the container before step-C.",
+    "expected_flow": [
+      "DETECT: alert MultiStepDeploy fires",
+      "DECIDE: map MultiStepDeploy → multi_step_deploy.sh; validation passes",
+      "DRY_RUN: dry-run passes for first step",
+      "ACT step-A: multi_step_deploy.sh --step-a → exit 0; logged TRANSACTIONAL_STEP complete",
+      "ACT step-B: multi_step_deploy.sh --step-b → exit 0; logged TRANSACTIONAL_STEP complete",
+      "ACT step-C: multi_step_deploy.sh --step-c → exit 1; logged TRANSACTIONAL_STEP_FAIL",
+      "ROLLBACK: rollback-B executed (reverse of step-B); logged TRANSACTIONAL_ROLLBACK_STEP",
+      "ROLLBACK: rollback-A executed (reverse of step-A); logged TRANSACTIONAL_ROLLBACK_STEP",
+      "LOG: TRANSACTIONAL_ROLLBACK_COMPLETE with rolled_back=[rollback-B, rollback-A]"
+    ],
+    "expected_log_events": [
+      "ALERT_DETECTED",
+      "DECIDE_RUNBOOK",
+      "BLAST_RADIUS_OK",
+      "DRY_RUN_PASS",
+      "TRANSACTIONAL_STEP_FAIL",
+      "TRANSACTIONAL_ROLLBACK_STEP",
+      "TRANSACTIONAL_ROLLBACK_STEP",
+      "TRANSACTIONAL_ROLLBACK_COMPLETE"
+    ],
+    "observable_outcome": "Log shows exactly 2 rollback steps in reverse order (rollback-B before rollback-A). No partial state left on the service."
+  },
+
+  "scenario_5_concurrent_alert": {
+    "name": "Concurrent alert race — 2 alerts fire on different services simultaneously",
+    "description": "payment-svc and inventory-svc both fire HighLatency at the same time. Orchestrator serializes per service (mutex keyed by service name) but allows both services to proceed in parallel.",
+    "inject_command": "bash data-pack/scripts/inject_fault.sh --concurrent ronki-payment-svc ronki-inventory-svc",
+    "expected_flow": [
+      "DETECT: alert HighLatency fires on payment-svc AND inventory-svc (same poll cycle)",
+      "LOCK: SERVICE_LOCK acquired for payment-svc; SERVICE_LOCK acquired for inventory-svc (different locks → both proceed)",
+      "ACT: runbook executes on payment-svc concurrently with runbook on inventory-svc",
+      "If a second alert for payment-svc arrives while first is still executing: log SERVICE_LOCK_BUSY and skip",
+      "VERIFY + SUCCESS on both services independently"
+    ],
+    "expected_log_events": [
+      "ALERT_DETECTED",
+      "ALERT_DETECTED",
+      "BLAST_RADIUS_OK",
+      "BLAST_RADIUS_OK",
+      "DRY_RUN_PASS",
+      "DRY_RUN_PASS",
+      "ACTION_EXECUTED",
+      "ACTION_EXECUTED",
+      "ACTION_SUCCESS",
+      "ACTION_SUCCESS"
+    ],
+    "lock_busy_event": "SERVICE_LOCK_BUSY",
+    "observable_outcome": "Timestamps in log show both services' DRY_RUN_PASS events within the same second. No SERVICE_LOCK_BUSY between different services. If same service fires twice, second alert logs SERVICE_LOCK_BUSY."
+  },
+
+  "scenario_6_decision_validation": {
+    "name": "LLM hallucination defense — decide returns non-existent runbook",
+    "description": "The runbook_map (or LLM decide path) returns a runbook name that is not present in runbook_registry. Orchestrator must refuse execution, log audit event, and escalate.",
+    "setup": "Temporarily add a mapping in runbook_map pointing alertname 'TestHallucination' to 'runbooks/nonexistent_runbook.sh'. Ensure runbook_registry does NOT include that path. Inject a synthetic alert with alertname=TestHallucination.",
+    "expected_flow": [
+      "DETECT: alert TestHallucination detected",
+      "DECIDE: runbook_map returns 'runbooks/nonexistent_runbook.sh'",
+      "VALIDATION: validate_runbook checks registry — name absent",
+      "LOG: DECISION_VALIDATION_FAILED with bad_runbook + alertname + raw_decision + action=escalate_no_auto_action",
+      "HALT: process_alert returns immediately; no DRY_RUN, no ACT, no runbook executed"
+    ],
+    "expected_log_events": [
+      "ALERT_DETECTED",
+      "DECISION_VALIDATION_FAILED"
+    ],
+    "must_not_appear": [
+      "DRY_RUN_PASS",
+      "ACTION_EXECUTED",
+      "RUNBOOK_EXEC"
+    ],
+    "observable_outcome": "Log contains DECISION_VALIDATION_FAILED with field bad_runbook='runbooks/nonexistent_runbook.sh'. No runbook subprocess is spawned. No RUNBOOK_EXEC event appears."
+  }
+}

@@ -1,0 +1,23 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "service"]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 2m
+  receiver: "webhook-logger"
+
+receivers:
+  - name: "webhook-logger"
+    # No real notification target — orchestrator polls /api/v2/alerts directly.
+    # This receiver is a no-op placeholder so Alertmanager starts cleanly.
+    webhook_configs: []
+
+inhibit_rules:
+  # If InstanceDown is firing, suppress HighLatency and HighErrorRate for same service
+  - source_match:
+      alertname: InstanceDown
+    target_match_re:
+      alertname: "HighLatency|HighErrorRate"
+    equal: ["service"]

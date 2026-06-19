@@ -1,0 +1,156 @@
+version: "3.9"
+
+networks:
+  ronki:
+    driver: bridge
+
+x-svc-mock: &svc-mock
+  image: python:3.12-slim
+  working_dir: /app
+  volumes:
+    - ./services/service.py:/app/service.py:ro
+  command: sh -c "pip install --quiet fastapi uvicorn prometheus-client && uvicorn service:app --host 0.0.0.0 --port 8080"
+  networks: [ronki]
+
+services:
+  # ── Service mocks (FastAPI via mounted service.py) ───────────────────────
+
+  frontend:
+    <<: *svc-mock
+    container_name: ronki-frontend
+    environment:
+      SERVICE_NAME: frontend
+      BASE_LATENCY_MS: "50"
+      JITTER_MS: "10"
+      FAIL_RATE: "0.01"
+    ports: ["8080:8080"]
+    labels:
+      ronki.service: frontend
+
+  api-gateway:
+    <<: *svc-mock
+    container_name: ronki-api-gateway
+    environment:
+      SERVICE_NAME: api-gateway
+      BASE_LATENCY_MS: "80"
+      JITTER_MS: "15"
+      FAIL_RATE: "0.01"
+    ports: ["8081:8080"]
+    labels:
+      ronki.service: api-gateway
+
+  payment-svc:
+    <<: *svc-mock
+    container_name: ronki-payment-svc
+    environment:
+      SERVICE_NAME: payment-svc
+      BASE_LATENCY_MS: "120"
+      JITTER_MS: "20"
+      FAIL_RATE: "0.02"
+    ports: ["8082:8080"]
+    labels:
+      ronki.service: payment-svc
+
+  inventory-svc:
+    <<: *svc-mock
+    container_name: ronki-inventory-svc
+    environment:
+      SERVICE_NAME: inventory-svc
+      BASE_LATENCY_MS: "40"
+      JITTER_MS: "8"
+      FAIL_RATE: "0.01"
+    ports: ["8083:8080"]
+    labels:
+      ronki.service: inventory-svc
+
+  checkout-svc:
+    <<: *svc-mock
+    container_name: ronki-checkout-svc
+    environment:
+      SERVICE_NAME: checkout-svc
+      BASE_LATENCY_MS: "150"
+      JITTER_MS: "25"
+      FAIL_RATE: "0.015"
+    ports: ["8084:8080"]
+    labels:
+      ronki.service: checkout-svc
+
+  # ── Prometheus ───────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: ronki-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1h"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    networks: [ronki]
+
+  # ── Alertmanager ─────────────────────────────────────────────────────────
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: ronki-alertmanager
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    networks: [ronki]
+
+  # ── Grafana ──────────────────────────────────────────────────────────────
+
+  grafana:
+    image: grafana/grafana-oss:11.2.0
+    container_name: ronki-grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks: [ronki]
+    depends_on: [prometheus, alertmanager, loki]
+
+  # ── Loki ─────────────────────────────────────────────────────────────────
+
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: ronki-loki
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks: [ronki]
+
+  # ── Promtail ─────────────────────────────────────────────────────────────
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    container_name: ronki-promtail
+    volumes:
+      - ./promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - audit_logs:/audit:ro
+    command: -config.file=/etc/promtail/config.yaml
+    networks: [ronki]
+    depends_on: [loki]
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  audit_logs:

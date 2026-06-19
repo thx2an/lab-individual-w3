@@ -1,0 +1,2 @@
+{"ts": "2026-06-19T05:47:15.291424+00:00", "level": "INFO", "component": "orchestrator", "event_type": "ALERT_DETECTED", "service": "payment-svc", "action": null, "result": null, "alertname": "TestHallucination", "severity": "critical"}
+{"ts": "2026-06-19T05:47:15.291815+00:00", "level": "ERROR", "component": "orchestrator", "event_type": "DECISION_VALIDATION_FAILED", "service": null, "action": "escalate_no_auto_action", "result": null, "bad_runbook": "runbooks/nonexistent_runbook.sh", "alertname": "TestHallucination", "raw_decision": "runbooks/nonexistent_runbook.sh"}

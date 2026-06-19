@@ -1,0 +1,59 @@
+{
+  "_description": "Baseline metrics captured from the Ronki stack under normal load. Verify step compares post-action metrics against these thresholds.",
+  "_captured_at": "2026-06-17T08:00:00Z",
+  "_load_profile": "~20 req/s across all services, no injected faults",
+
+  "services": {
+    "frontend": {
+      "latency_p50_ms": 48,
+      "latency_p99_ms": 95,
+      "error_rate_pct": 0.0,
+      "rps": 8.2,
+      "up": 1
+    },
+    "api-gateway": {
+      "latency_p50_ms": 76,
+      "latency_p99_ms": 142,
+      "error_rate_pct": 0.0,
+      "rps": 12.5,
+      "up": 1
+    },
+    "payment-svc": {
+      "latency_p50_ms": 118,
+      "latency_p99_ms": 195,
+      "error_rate_pct": 1.8,
+      "rps": 4.1,
+      "up": 1
+    },
+    "inventory-svc": {
+      "latency_p50_ms": 38,
+      "latency_p99_ms": 72,
+      "error_rate_pct": 0.0,
+      "rps": 6.7,
+      "up": 1
+    },
+    "checkout-svc": {
+      "latency_p50_ms": 145,
+      "latency_p99_ms": 230,
+      "error_rate_pct": 1.2,
+      "rps": 3.8,
+      "up": 1
+    }
+  },
+
+  "verify_thresholds": {
+    "_description": "Verify step passes when post-action metric is within these bounds.",
+    "latency_p99_max_ms": 500,
+    "error_rate_max_pct": 10.0,
+    "up_required": 1,
+    "verify_timeout_seconds": 60,
+    "verify_poll_interval_seconds": 10,
+    "verify_min_samples": 3
+  },
+
+  "prometheus_queries": {
+    "latency_p99": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{service=\"{service}\"}[1m])) * 1000",
+    "error_rate_pct": "rate(http_errors_total{service=\"{service}\"}[2m]) / (rate(http_requests_total{service=\"{service}\"}[2m]) + 0.001) * 100",
+    "up": "up{job=\"{service}\"}"
+  }
+}

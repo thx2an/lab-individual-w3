@@ -1,0 +1,13 @@
+# MLflow server environment — copy these into your shell or a .env file
+# Usage: export $(cat configs/mlflow-config.txt | grep -v '^#' | xargs)
+
+MLFLOW_PORT=5000
+MLFLOW_TRACKING_URI=http://localhost:5000
+
+# PostgreSQL backend (matches docker-compose.yml)
+POSTGRES_DB=mlflow
+POSTGRES_USER=mlflow
+POSTGRES_PASSWORD=mlflow_pass
+
+# Artifact store — local volume mounted in container
+MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts

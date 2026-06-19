@@ -1,0 +1,69 @@
+# Orchestrator configuration — closed_loop.py reads this at startup.
+# No thresholds are hard-coded in Python; everything tunable lives here or in
+# data/baseline.json (verify thresholds).
+
+alertmanager_url: "http://localhost:9093"
+prometheus_url: "http://localhost:9090"
+poll_interval_seconds: 15
+runbook_timeout_seconds: 30
+
+# Services the orchestrator must NEVER auto-remediate. The orchestrator exposes
+# its own metrics on :9100 (Prometheus job=closed-loop, service label below), so
+# at startup `up==0` briefly fires an InstanceDown about the orchestrator itself.
+# Trying to `docker restart` a non-existent container would be a false failure
+# that wrongly charges the circuit breaker — so we skip these alerts entirely.
+ignore_services:
+  - "closed-loop-orchestrator"
+
+# Path to the captured baseline (relative to THIS config file).
+baseline_path: "../data-pack/data/baseline.json"
+
+# ── DECIDE: alertname → runbook (rule-based engine) ──────────────────────────
+runbook_map:
+  HighLatency:      "runbooks/restart_service.sh"
+  HighErrorRate:    "runbooks/clear_cache.sh"
+  InstanceDown:     "runbooks/restart_service.sh"
+  MultiStepDeploy:  "runbooks/multi_step_deploy.sh"
+  # Scenario 6 (LLM-hallucination defense): this maps to a script that is
+  # deliberately ABSENT from runbook_registry below, so the orchestrator must
+  # refuse it. Harmless in normal operation (the alert never fires on its own).
+  TestHallucination: "runbooks/nonexistent_runbook.sh"
+
+# ── ROLLBACK: alertname → rollback runbook (defaults to the runbook itself) ──
+rollback_map:
+  HighLatency:   "runbooks/restart_service.sh"
+  HighErrorRate: "runbooks/restart_service.sh"
+  InstanceDown:  "runbooks/restart_service.sh"
+
+# ── Decision validation registry (stress 3) ─────────────────────────────────
+# Only runbooks listed here may ever be executed. Anything else → refuse +
+# DECISION_VALIDATION_FAILED. Note: nonexistent_runbook.sh is NOT here.
+runbook_registry:
+  - "runbooks/restart_service.sh"
+  - "runbooks/clear_cache.sh"
+  - "runbooks/scale_replicas.sh"
+  - "runbooks/multi_step_deploy.sh"
+
+# ── Transactional multi-step deploy (stress 1) ──────────────────────────────
+# Steps run A→B→C. If any step fails, completed steps are rolled back in
+# reverse order using multi_step_rollback_map (rollback-B then rollback-A).
+multi_step_map:
+  MultiStepDeploy:
+    - { name: "step-A", script: "runbooks/multi_step_deploy.sh", args: ["--step-a"] }
+    - { name: "step-B", script: "runbooks/multi_step_deploy.sh", args: ["--step-b"] }
+    - { name: "step-C", script: "runbooks/multi_step_deploy.sh", args: ["--step-c"] }
+
+multi_step_rollback_map:
+  MultiStepDeploy:
+    - { name: "rollback-A", script: "runbooks/multi_step_deploy.sh", args: ["--rollback-a"] }
+    - { name: "rollback-B", script: "runbooks/multi_step_deploy.sh", args: ["--rollback-b"] }
+
+# ── Blast-radius caps ───────────────────────────────────────────────────────
+blast_radius:
+  max_actions_per_minute: 3            # total actions across ALL services / 60s
+  max_restarts_per_service_per_hour: 5 # actions on a SINGLE service / 3600s
+
+# ── Circuit breaker ─────────────────────────────────────────────────────────
+circuit_breaker:
+  consecutive_failure_threshold: 3     # halt after 3 consecutive failures
+  reset_mode: manual                   # operator restarts the process to reset
