@@ -1,4 +1,4 @@
-# MLOps Lifecycle — Submission (TienThanh)
+# MLOps Lifecycle — Submission (PhamHuuTienThanh)
 
 Anomaly-detection model for a payment gateway, from train → register → serve → drift-detect → retrain → blue-green swap → post-deploy auto-rollback.
 
@@ -10,8 +10,10 @@ All commands run from the `data-pack/` directory. The stack (MLflow, Postgres, P
 # 0) Define the run command once (Python 3.11 + pinned deps)
 RUN="uv run --python 3.11 --no-project \
   --with mlflow==2.13.2 --with evidently==0.4.40 \
-  --with scikit-learn --with pandas --with numpy \
+  --with scikit-learn --with pandas --with numpy --with setuptools \
   --with fastapi --with uvicorn --with prometheus_client --with requests python"
+# NOTE: --with setuptools is required — MLflow 2.13.2 imports pkg_resources,
+# which is not bundled in a fresh Python 3.11 environment.
 export MLFLOW_TRACKING_URI=http://localhost:5000
 
 # 1) Bring the stack up (Grafana dashboard: http://localhost:3000)

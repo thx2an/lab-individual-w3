@@ -29,8 +29,8 @@ không redeploy. Sự kiện ghi vào `outputs/audit_log.jsonl` (`auto_rollback_
 payment processor mới khiến cùng mức error_rate trước là anomaly nay là bình thường. Evidently
 `DataDriftPreset` chỉ detect **data drift** (test thống kê trên feature distribution). Concept drift
 trong `drifted.csv` (25% nhãn bị lật) Evidently không thấy được — tôi phát hiện nó bằng performance
-check (`--check-mode combined`): đo precision của model trên dữ liệu có nhãn, precision tụt xuống
-~0.45 là tín hiệu concept drift dù feature score cao.
+check (`--check-mode combined`): đo precision của model `@production` trên dữ liệu có nhãn, precision
+tụt xuống **0.2907** (so với 0.91 lúc deploy) là tín hiệu concept drift dù data drift score đã = 1.0.
 
 ---
 

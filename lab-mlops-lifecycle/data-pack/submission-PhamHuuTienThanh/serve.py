@@ -151,7 +151,10 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    uvicorn.run("serve:app", host=args.host, port=args.port)
+    # Pass the app object (not "serve:app") so uvicorn does not re-import this
+    # module — a second import would re-register the Prometheus collectors and
+    # raise "Duplicated timeseries in CollectorRegistry".
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

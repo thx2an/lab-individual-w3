@@ -63,9 +63,16 @@ def detect_drift(
     report = Report(metrics=[DataDriftPreset()])
     report.run(reference_data=ref, current_data=cur)
 
-    result = report.as_dict()["metrics"][0]["result"]
-    share_drifted = float(result.get("share_of_drifted_columns", 0.0))
-    per_feature = result.get("drift_by_columns", {})
+    # DataDriftPreset emits two metrics: [0] DatasetDriftMetric (dataset-level summary),
+    # [1] DataDriftTable (per-column detail with drift_by_columns).
+    metrics = report.as_dict()["metrics"]
+    summary = metrics[0]["result"]
+    share_drifted = float(summary.get("share_of_drifted_columns", 0.0))
+    per_feature = {}
+    for m in metrics:
+        if "drift_by_columns" in m.get("result", {}):
+            per_feature = m["result"]["drift_by_columns"]
+            break
     drifted_features = [f for f, info in per_feature.items() if info.get("drift_detected", False)]
 
     os.makedirs(REPORT_DIR, exist_ok=True)
