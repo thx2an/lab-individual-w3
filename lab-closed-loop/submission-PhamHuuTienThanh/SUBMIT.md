@@ -1,6 +1,6 @@
 # SUBMIT.md — Closed-Loop Auto-Remediation
 
-Tác giả: TienThanh
+Sinh viên: Phạm Hữu Tiến Thành
 
 > **Trạng thái: đã chạy thật cả 6 scenario trên Docker stack (2026-06-19).** Log thật
 > được trích ở §3. Toàn bộ audit log gốc nằm trong `captured-logs/scen{1..6}.jsonl`
@@ -12,7 +12,7 @@ Tác giả: TienThanh
 ## 0. Cấu trúc bài nộp
 
 ```
-submission-tienthanh/
+submission-PhamHuuTienThanh/
 ├── closed_loop.py            # orchestrator (DETECT→DECIDE→DRY-RUN→ACT→VERIFY→ROLLBACK)
 ├── config.yaml               # runbook_map, registry, blast-radius, circuit-breaker, multi-step, ignore_services
 ├── engine/
@@ -64,14 +64,14 @@ AUDIT_LOG_PATH=audit_log.jsonl uv run python closed_loop.py --config config.yaml
 
 | Hạng mục | Cách kiểm | Kết quả |
 |---|---|---|
-| `bash -n` toàn bộ runbooks/tools | syntax check | ✅ PASS |
-| `py_compile` toàn bộ Python | compile | ✅ PASS |
-| **Scenario 1** — Action success | chạy thật trên stack | ✅ PASS → `ACTION_SUCCESS` |
-| **Scenario 2** — Action fail → rollback | chạy thật trên stack | ✅ PASS → `ROLLBACK_RESULT(still_unhealthy)` |
-| **Scenario 3** — Circuit breaker | chạy thật trên stack | ✅ PASS → `CIRCUIT_BREAKER_HALT(=3)` |
-| **Scenario 4** — Transactional rollback | chạy thật trên stack | ✅ PASS → rollback `[rollback-B, rollback-A]` |
-| **Scenario 5** — Concurrent mutex | chạy thật trên stack | ✅ PASS → song song + `SERVICE_LOCK_BUSY` |
-| **Scenario 6** — Hallucination defense | chạy thật trên stack | ✅ PASS → `DECISION_VALIDATION_FAILED`, breaker=0 |
+| `bash -n` toàn bộ runbooks/tools | syntax check | PASS |
+| `py_compile` toàn bộ Python | compile | PASS |
+| **Scenario 1** — Action success | chạy thật trên stack | PASS → `ACTION_SUCCESS` |
+| **Scenario 2** — Action fail → rollback | chạy thật trên stack | PASS → `ROLLBACK_RESULT(still_unhealthy)` |
+| **Scenario 3** — Circuit breaker | chạy thật trên stack | PASS → `CIRCUIT_BREAKER_HALT(=3)` |
+| **Scenario 4** — Transactional rollback | chạy thật trên stack | PASS → rollback `[rollback-B, rollback-A]` |
+| **Scenario 5** — Concurrent mutex | chạy thật trên stack | PASS → song song + `SERVICE_LOCK_BUSY` |
+| **Scenario 6** — Hallucination defense | chạy thật trên stack | PASS → `DECISION_VALIDATION_FAILED`, breaker=0 |
 
 ### Lưu ý vận hành quan trọng (rút ra khi chạy thật)
 
