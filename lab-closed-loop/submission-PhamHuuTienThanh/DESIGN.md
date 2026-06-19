@@ -1,6 +1,7 @@
 # DESIGN.md — Closed-Loop Auto-Remediation (Ronki)
 
-Tác giả: TienThanh · Decision engine: **Rule-based** (Option A)
+Sinh viên: Phạm Hữu Tiến Thành
+Decision engine: **Rule-based** (Option A)
 
 Tài liệu này trả lời 4 câu hỏi bắt buộc của HANDOUT, kèm số liệu cụ thể.
 
